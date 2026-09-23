@@ -1,11 +1,24 @@
 services:
   mosquitto:
     image: eclipse-mosquitto:2
+    # Write the broker config at start so Portainer does not need a host file.
+    # A missing bind-mount source is created as a directory and then fails to mount.
+    user: "0:0"
     restart: unless-stopped
     ports:
       - "1883:1883"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        cat > /mosquitto/config/mosquitto.conf <<'EOF'
+        listener 1883
+        allow_anonymous true
+        persistence true
+        persistence_location /mosquitto/data/
+        log_dest stdout
+        EOF
+        exec /docker-entrypoint.sh /usr/sbin/mosquitto -c /mosquitto/config/mosquitto.conf
     volumes:
-      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - mosquitto-data:/mosquitto/data
       - mosquitto-log:/mosquitto/log
 
