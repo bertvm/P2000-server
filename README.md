@@ -51,8 +51,7 @@ rtl_fm -f 169.65M -M fm -s 22050 | multimon-ng -a FLEX -t raw -
 
 ```bash
 cp .env.example .env
-# For first bring-up without a dongle:
-#   P2000_MODE=mock
+# Without a dongle, set P2000_MODE=mock
 docker compose up -d --build
 ```
 
@@ -78,10 +77,10 @@ http://<pi-ip>:8080/api2/find/
 1. Flash Raspberry Pi OS Lite 64-bit, enable SSH, set a static IP or note mDNS.
 2. Install Docker (`curl -fsSL https://get.docker.com | sh`) and add your user to the `docker` group.
 3. Blacklist DVB drivers + install `rtl-sdr` / `multimon-ng` (commands above).
-4. Clone this repo, `cp .env.example .env`, set `P2000_MODE=mock`, `docker compose up -d --build`.
+4. Clone this repo, `cp .env.example .env`, `docker compose up -d --build`.
 5. Verify `curl http://127.0.0.1:8080/health` and `mosquitto_sub -h 127.0.0.1 -t p2000/alerts -v`.
 6. Point Tronbyt `api_url` at the Pi; flash `esp32-client` with the Pi IP.
-7. Switch `.env` to `P2000_MODE=pipe`, restart compose, run `scripts/host-decoder.sh` on the host with the RTL-SDR attached.
+7. Watch publisher logs for `sdr:` tuner lines, then alerts on `p2000/alerts`. If the kernel DVB driver owns the stick, `rtl_fm` will keep failing until that blacklist is in place.
 
 ## Modes
 
@@ -91,7 +90,7 @@ http://<pi-ip>:8080/api2/find/
 | `pipe` | Reads FLEX lines from stdin / named pipe (host decoder) |
 | `sdr` | Runs `rtl_fm \| multimon-ng` inside the publisher container (needs device passthrough) |
 
-Recommended on Pi 4: run `rtl_fm | multimon-ng` on the **host** and feed the publisher with `P2000_MODE=pipe` (see `scripts/host-decoder.sh`). That keeps USB SDR quirks out of Docker.
+The publisher container runs `rtl_fm | multimon-ng` itself (`P2000_MODE=sdr`) and sees the stick through `/dev/bus/usb`. On the Pi, blacklist the kernel DVB drivers first or `rtl_fm` cannot claim the dongle. `P2000_MODE=pipe` plus `scripts/host-decoder.sh` is the fallback if you decode on the host instead.
 
 ## ESP32 client
 

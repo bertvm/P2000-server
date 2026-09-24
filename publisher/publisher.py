@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import re
+import signal
 import sqlite3
 import subprocess
 import sys
@@ -322,26 +323,44 @@ class Publisher:
             time.sleep(0.5)
 
     def run_sdr(self) -> None:
+        # Stock multimon-ng prints classic "FLEX|..." lines (no --json flag).
         cmd = (
             f"rtl_fm -f {self.freq} -M fm -s {self.sample_rate} -g 40 -l 0 -E dc -F 0 - "
-            f"| multimon-ng -t raw -a FLEX --json -"
+            f"| multimon-ng -t raw -a FLEX -q -"
         )
-        LOG.info("Starting SDR pipeline: %s", cmd)
-        proc = subprocess.Popen(
-            ["bash", "-lc", cmd],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-        )
-        assert proc.stdout is not None
-        for line in proc.stdout:
-            if line.upper().startswith("FLEX") or line.startswith("{"):
-                self.handle_line(line)
-            else:
-                LOG.debug("sdr: %s", line.rstrip())
-        code = proc.wait()
-        raise RuntimeError(f"SDR pipeline exited with code {code}")
+        while True:
+            LOG.info("Starting SDR pipeline: %s", cmd)
+            proc = subprocess.Popen(
+                cmd,
+                shell=True,
+                executable="/bin/sh",
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                start_new_session=True,
+            )
+            assert proc.stdout is not None
+            try:
+                for line in proc.stdout:
+                    if "FLEX" in line.upper() or line.startswith("{"):
+                        self.handle_line(line)
+                    else:
+                        LOG.info("sdr: %s", line.rstrip())
+            finally:
+                if proc.poll() is None:
+                    try:
+                        os.killpg(proc.pid, signal.SIGTERM)
+                    except ProcessLookupError:
+                        pass
+                    try:
+                        proc.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        os.killpg(proc.pid, signal.SIGKILL)
+                        proc.wait()
+            code = proc.wait()
+            LOG.error("SDR pipeline exited with code %s; retrying in 5s", code)
+            time.sleep(5)
 
     def run(self) -> None:
         logging.basicConfig(
