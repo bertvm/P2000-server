@@ -44,7 +44,7 @@ sudo reboot
 Confirm RF decode (outside Docker):
 
 ```bash
-rtl_fm -f 169.65M -M fm -s 22050 | multimon-ng -a FLEX -t raw -
+rtl_fm -f 169.65M -M fm -s 22050 -g 40 -p 45 -l 0 -E dc -F 0 - | multimon-ng -a FLEX -a FLEX_NEXT -t raw -
 ```
 
 ## Quick start

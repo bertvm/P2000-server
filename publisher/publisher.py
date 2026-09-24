@@ -255,6 +255,8 @@ class Publisher:
         self.mode = os.environ.get("P2000_MODE", "mock").lower()
         self.freq = os.environ.get("P2000_FREQUENCY", "169.65M")
         self.sample_rate = os.environ.get("P2000_SAMPLE_RATE", "22050")
+        self.gain = os.environ.get("P2000_GAIN", "40")
+        self.ppm = os.environ.get("P2000_PPM", "45")
         self.pipe_path = os.environ.get("P2000_PIPE_PATH", "/data/flex.pipe")
         self.mock_interval = float(os.environ.get("P2000_MOCK_INTERVAL_SEC", "12"))
         self.store = Store(
@@ -325,8 +327,8 @@ class Publisher:
     def run_sdr(self) -> None:
         # Stock multimon-ng prints classic "FLEX|..." lines (no --json flag).
         cmd = (
-            f"rtl_fm -f {self.freq} -M fm -s {self.sample_rate} -g 40 -l 0 -E dc -F 0 - "
-            f"| multimon-ng -t raw -a FLEX -q -"
+            f"rtl_fm -f {self.freq} -M fm -s {self.sample_rate} -g {self.gain} -p {self.ppm} "
+            f"-l 0 -E dc -F 0 - | multimon-ng -t raw -a FLEX -a FLEX_NEXT -q -"
         )
         while True:
             LOG.info("Starting SDR pipeline: %s", cmd)
