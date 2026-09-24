@@ -186,9 +186,50 @@ def extract_capcodes(text: str) -> list[dict[str, str]]:
     return [{"capcode": c} for c in seen[:8]]
 
 
+def _one_bit_letter(ch: str) -> str | None:
+    """The single letter one FLEX bit away from ch, if there is exactly one."""
+    value = ord(ch)
+    if value > 127:
+        return None
+    found: list[str] = []
+    for bit in range(7):
+        flipped = value ^ (1 << bit)
+        if 65 <= flipped <= 90 or 97 <= flipped <= 122:
+            found.append(chr(flipped))
+    if len(found) == 1:
+        return found[0]
+    return None
+
+
+def repair_flex_bits(text: str) -> str:
+    """Fix a punctuation mark inside a word when one bit-flip makes it a letter."""
+
+    def fix_token(token: str) -> str:
+        chars = list(token)
+        for index, ch in enumerate(chars):
+            if ch.isalpha():
+                continue
+            if index == 0 or index == len(chars) - 1:
+                continue
+            if not (chars[index - 1].isalpha() and chars[index + 1].isalpha()):
+                continue
+            letter = _one_bit_letter(ch)
+            if letter is None:
+                continue
+            left, right = chars[index - 1], chars[index + 1]
+            if left.islower() and right.islower():
+                letter = letter.lower()
+            elif left.isupper() and right.isupper():
+                letter = letter.upper()
+            chars[index] = letter
+        return "".join(chars)
+
+    return re.sub(r"\S+", lambda match: fix_token(match.group(0)), text)
+
+
 def clean_page_text(text: str) -> str | None:
     """Drop FLEX bit-errors. Keep incident text, discard random 7-bit garbage."""
-    body = text.strip().rstrip("$").strip()
+    body = repair_flex_bits(text.strip().rstrip("$").strip())
     if len(body) < 4 or any(ch not in _PAGE_CHARS for ch in body):
         return None
     if detect_priority(body):

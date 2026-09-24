@@ -52,6 +52,13 @@ def test_parse_flex_next_drops_garbage() -> None:
     assert parse_flex_line(noise) is None
 
 
+def test_repairs_one_bit_street_name() -> None:
+    line = "FLEX_NEXT|1600/2|11.010.A|000016175|SS|5|ALN|3.0.K|A1 Temm)nckstraat LEIDEN : 16175"
+    alert = parse_flex_line(line)
+    assert alert is not None
+    assert alert["message"] == "A1 Temminckstraat LEIDEN : 16175"
+
+
 def test_detect_helpers() -> None:
     assert detect_service("Lifeliner 1 onderweg") == "lifeliner"
     assert detect_priority("PRIO 2 test") == "P2"
@@ -67,6 +74,7 @@ if __name__ == "__main__":
     test_parse_text_flex()
     test_parse_json_flex()
     test_parse_flex_next_drops_garbage()
+    test_repairs_one_bit_street_name()
     test_detect_helpers()
     test_build_alert_aliases()
     print("ok")
