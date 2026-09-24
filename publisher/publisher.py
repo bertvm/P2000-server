@@ -162,12 +162,71 @@ class MqttOut:
         self.client.publish(self.topic, json.dumps(alert, ensure_ascii=False), qos=1)
 
 
+# Printable characters that show up in real P2000 text. Anything else is a bad decode.
+_PAGE_CHARS = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 ,.:;/+-()'&#")
+_WORD_RE = re.compile(r"[A-Za-z]{4,}")
+
+
+def normalize_capcode(raw: str) -> str:
+    digits = raw.strip()
+    if not digits.isdigit():
+        return digits
+    value = int(digits)
+    if value <= 9_999_999:
+        return f"{value:07d}"
+    return str(value)
+
+
 def extract_capcodes(text: str) -> list[dict[str, str]]:
     seen: list[str] = []
     for match in CAPCODE_RE.findall(text):
-        if match not in seen:
-            seen.append(match)
+        code = normalize_capcode(match)
+        if code not in seen and code != "0000000":
+            seen.append(code)
     return [{"capcode": c} for c in seen[:8]]
+
+
+def clean_page_text(text: str) -> str | None:
+    """Drop FLEX bit-errors. Keep incident text, discard random 7-bit garbage."""
+    body = text.strip().rstrip("$").strip()
+    if len(body) < 4 or any(ch not in _PAGE_CHARS for ch in body):
+        return None
+    if detect_priority(body):
+        return body
+    words = [
+        word
+        for word in _WORD_RE.findall(body)
+        if word.isupper() or word.islower() or (word[0].isupper() and word[1:].islower())
+    ]
+    if len(words) >= 2:
+        return body
+    return None
+
+
+def _flex_next_alert(line: str, parts: list[str]) -> dict[str, Any] | None:
+    # FLEX_NEXT|1600/2|11.054.A|0001120123|SS|5|ALN|3.0.K|message
+    if len(parts) < 8 or parts[6] != "ALN":
+        return None
+    frag = parts[7]
+    if not re.fullmatch(r"\d\.\d\.[KCF]", frag):
+        return None
+    flag = frag[-1]
+    if flag != "K":
+        return None
+    caps: list[dict[str, str]] = []
+    primary = normalize_capcode(parts[3])
+    if primary and primary != "0000000":
+        caps.append({"capcode": primary})
+    index = 8
+    while index < len(parts) - 1 and re.fullmatch(r"\d{7,10}", parts[index]):
+        extra = normalize_capcode(parts[index])
+        if extra != "0000000" and not any(c["capcode"] == extra for c in caps):
+            caps.append({"capcode": extra})
+        index += 1
+    message = clean_page_text("|".join(parts[index:]))
+    if not message:
+        return None
+    return build_alert(message, caps, line, source="sdr")
 
 
 def parse_flex_line(line: str) -> dict[str, Any] | None:
@@ -183,27 +242,33 @@ def parse_flex_line(line: str) -> dict[str, Any] | None:
             return None
         message = str(obj.get("message") or obj.get("msg") or obj.get("data") or "").strip()
         address = str(obj.get("address") or obj.get("capcode") or "").strip()
-        raw = line
-        if not message and not address:
+        body = clean_page_text(message or address)
+        if not body:
             return None
-        body = message or address
         caps = extract_capcodes(f"{address} {message}")
-        if address and not any(c["capcode"] == address for c in caps):
-            caps.insert(0, {"capcode": address})
-        return build_alert(body, caps, raw, source="sdr")
+        if address:
+            code = normalize_capcode(address)
+            if code and code != "0000000" and not any(c["capcode"] == code for c in caps):
+                caps.insert(0, {"capcode": code})
+        return build_alert(body, caps, line, source="sdr")
 
-    # Classic text: FLEX|...|message
     if "FLEX" not in line.upper():
         return None
     parts = [p.strip() for p in line.split("|")]
-    message = parts[-1] if parts else line
+    if parts and parts[0] == "FLEX_NEXT":
+        return _flex_next_alert(line, parts)
+
+    # Classic text: FLEX|...|message
+    message = clean_page_text(parts[-1] if parts else line)
+    if not message:
+        return None
     caps = extract_capcodes(line)
-    # Prefer numeric tokens that look like capcodes near the middle of FLEX rows
     if len(parts) >= 4:
         for part in parts[1:-1]:
             if re.fullmatch(r"\d{5,7}", part):
-                if not any(c["capcode"] == part for c in caps):
-                    caps.insert(0, {"capcode": part})
+                code = normalize_capcode(part)
+                if not any(c["capcode"] == code for c in caps):
+                    caps.insert(0, {"capcode": code})
     return build_alert(message, caps, line, source="sdr")
 
 

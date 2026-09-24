@@ -44,6 +44,7 @@ _PLACE_HINTS: list[tuple[str, str]] = [
     ("gouda", "5"),
     ("den bosch", "6"),
     ("'s-hertogenbosch", "6"),
+    ("rosmalen", "6"),
     ("leeuwarden", "7"),
     ("fryslan", "7"),
     ("friesland", "7"),

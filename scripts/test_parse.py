@@ -33,6 +33,25 @@ def test_parse_json_flex() -> None:
     assert alert["capcodes"][0]["capcode"] == "1512345"
 
 
+def test_parse_flex_next_drops_garbage() -> None:
+    good = (
+        "FLEX_NEXT|1600/2|11.054.A|0001120123|SS|5|ALN|3.0.K|A2 Rosmalent: 11397$"
+    )
+    alert = parse_flex_line(good)
+    assert alert is not None
+    assert alert["message"] == "A2 Rosmalent: 11397"
+    assert alert["capcodes"][0]["capcode"] == "1120123"
+    assert alert["priority"] == "A2"
+    assert alert["region_id"] == "6"
+    junk = "FLEX_NEXT|1600/2|11.044.A|0001180000|SS|5|ALN|3.0.K|TECTPREQ MO@"
+    assert parse_flex_line(junk) is None
+    noise = (
+        "FLEX_NEXT|1600/2|11.044.A|0001180000|SS|5|ALN|3.0.K|"
+        "eytykadq4309qTttrovterdao`RGT4fm zon93t9c"
+    )
+    assert parse_flex_line(noise) is None
+
+
 def test_detect_helpers() -> None:
     assert detect_service("Lifeliner 1 onderweg") == "lifeliner"
     assert detect_priority("PRIO 2 test") == "P2"
@@ -47,6 +66,7 @@ def test_build_alert_aliases() -> None:
 if __name__ == "__main__":
     test_parse_text_flex()
     test_parse_json_flex()
+    test_parse_flex_next_drops_garbage()
     test_detect_helpers()
     test_build_alert_aliases()
     print("ok")
