@@ -59,6 +59,19 @@ def test_repairs_one_bit_street_name() -> None:
     assert alert["message"] == "A1 Temminckstraat LEIDEN : 16175"
 
 
+def test_assembles_fragments() -> None:
+    from publisher.publisher import assemble_flex_next
+
+    pending: dict[str, str] = {}
+    first = "FLEX_NEXT|1600/2|11.010.A|000016175|SS|5|ALN|1.1.F|A1 Temminck"
+    assert assemble_flex_next(first, pending) is None
+    second = "FLEX_NEXT|1600/2|11.010.A|000016175|SS|5|ALN|2.0.C|straat LEIDEN"
+    joined = assemble_flex_next(second, pending)
+    alert = parse_flex_line(joined or "")
+    assert alert is not None
+    assert alert["message"] == "A1 Temminckstraat LEIDEN"
+
+
 def test_detect_helpers() -> None:
     assert detect_service("Lifeliner 1 onderweg") == "lifeliner"
     assert detect_priority("PRIO 2 test") == "P2"
@@ -75,6 +88,7 @@ if __name__ == "__main__":
     test_parse_json_flex()
     test_parse_flex_next_drops_garbage()
     test_repairs_one_bit_street_name()
+    test_assembles_fragments()
     test_detect_helpers()
     test_build_alert_aliases()
     print("ok")

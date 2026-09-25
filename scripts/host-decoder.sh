@@ -14,4 +14,4 @@ if [[ ! -p "$PIPE" ]]; then
 fi
 
 echo "Writing FLEX JSON to $PIPE (freq=$FREQ)" >&2
-exec bash -c "rtl_fm -f ${FREQ} -M fm -s ${RATE} -g ${GAIN} -p ${PPM} -l 0 -E dc -F 0 - | multimon-ng -t raw -a FLEX -a FLEX_NEXT -q - >> '${PIPE}'"
+exec bash -c "rtl_fm -f ${FREQ} -M fm -s ${RATE} -g ${GAIN} -p ${PPM} -l 0 -E dc -F 0 - | stdbuf -oL multimon-ng -t raw -a FLEX -a FLEX_NEXT -q - >> '${PIPE}'"

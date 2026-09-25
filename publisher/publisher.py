@@ -244,6 +244,29 @@ def clean_page_text(text: str) -> str | None:
     return None
 
 
+def assemble_flex_next(line: str, pending: dict[str, str]) -> str | None:
+    """Join FLEX_NEXT fragments. F waits, C completes, K passes through."""
+    raw = line.strip()
+    parts = [p.strip() for p in raw.split("|")]
+    if not parts or parts[0] != "FLEX_NEXT" or len(parts) < 8 or parts[6] != "ALN":
+        return raw
+    frag = parts[7]
+    if not re.fullmatch(r"\d\.\d\.[KCF]", frag):
+        return raw
+    cap = parts[3]
+    message = "|".join(parts[8:])
+    flag = frag[-1]
+    if flag == "F":
+        pending[cap] = pending.get(cap, "") + message
+        return None
+    if flag == "C":
+        message = pending.pop(cap, "") + message
+        parts[7] = frag[:-1] + "K"
+        parts = parts[:8] + [message]
+        return "|".join(parts)
+    return raw
+
+
 def _flex_next_alert(line: str, parts: list[str]) -> dict[str, Any] | None:
     # FLEX_NEXT|1600/2|11.054.A|0001120123|SS|5|ALN|3.0.K|message
     if len(parts) < 8 or parts[6] != "ALN":
@@ -371,17 +394,24 @@ class Publisher:
         )
         self.filters = Filters(os.environ.get("P2000_FILTERS_PATH", "/data/filters.yaml"))
         self.mqtt = MqttOut()
+        self._fragments: dict[str, str] = {}
 
     def handle_line(self, line: str) -> None:
-        alert = parse_flex_line(line)
+        assembled = assemble_flex_next(line, self._fragments)
+        if assembled is None:
+            LOG.info("fragment: %s", line.strip()[:180])
+            return
+        alert = parse_flex_line(assembled)
         if not alert:
+            if "FLEX" in assembled.upper():
+                LOG.info("ignored: %s", assembled.strip()[:180])
             return
         self.emit(alert)
 
     def emit(self, alert: dict[str, Any]) -> None:
         self.filters.reload()
         if not self.filters.accept(alert):
-            LOG.debug("Filtered: %s", alert.get("message"))
+            LOG.info("filtered: %s", alert.get("message"))
             return
         self.store.insert(alert)
         self.mqtt.publish_alert(alert)
@@ -432,9 +462,10 @@ class Publisher:
 
     def run_sdr(self) -> None:
         # Stock multimon-ng prints classic "FLEX|..." lines (no --json flag).
+        # stdbuf keeps multimon from holding pages in a block buffer when stdout is a pipe.
         cmd = (
             f"rtl_fm -f {self.freq} -M fm -s {self.sample_rate} -g {self.gain} -p {self.ppm} "
-            f"-l 0 -E dc -F 0 - | multimon-ng -t raw -a FLEX -a FLEX_NEXT -q -"
+            f"-l 0 -E dc -F 0 - | stdbuf -oL multimon-ng -t raw -a FLEX -a FLEX_NEXT -q -"
         )
         while True:
             LOG.info("Starting SDR pipeline: %s", cmd)
