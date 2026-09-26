@@ -13,6 +13,7 @@ import sys
 import threading
 import time
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import Any
 
@@ -31,12 +32,27 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def alert_zone() -> ZoneInfo:
+    name = os.environ.get("P2000_TZ") or os.environ.get("TZ") or "Europe/Amsterdam"
+    return ZoneInfo(name)
+
+
+def as_local(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(alert_zone())
+
+
 def iso_z(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def iso_local(dt: datetime) -> str:
+    return as_local(dt).isoformat(timespec="seconds")
+
+
 def tijd_str(dt: datetime) -> str:
-    return dt.astimezone(timezone.utc).strftime("%H:%M")
+    return as_local(dt).strftime("%H:%M")
 
 
 class Store:
@@ -344,15 +360,16 @@ def build_alert(
     when: datetime | None = None,
 ) -> dict[str, Any]:
     when = when or utc_now()
+    local = as_local(when)
     service = detect_service(message)
     priority = detect_priority(message)
     region_id, region_name = guess_region(message)
     primary = capcodes[0]["capcode"] if capcodes else "0000000"
-    alert_id = f"{when.strftime('%Y%m%dT%H%M%SZ')}-{primary}"
+    alert_id = f"{local.strftime('%Y%m%dT%H%M%S')}-{primary}"
     return {
         "schema": 1,
         "id": alert_id,
-        "timestamp": iso_z(when),
+        "timestamp": iso_local(when),
         "tijd": tijd_str(when),
         "message": message,
         "tekstmelding": message,

@@ -3,11 +3,14 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+
+from datetime import datetime, timezone  # noqa: E402
 
 from publisher.publisher import build_alert, parse_flex_line  # noqa: E402
 from publisher.services import detect_priority, detect_service  # noqa: E402
@@ -77,6 +80,15 @@ def test_detect_helpers() -> None:
     assert detect_priority("PRIO 2 test") == "P2"
 
 
+def test_timestamp_is_local() -> None:
+    os.environ["P2000_TZ"] = "Europe/Amsterdam"
+    when = datetime(2026, 9, 24, 17, 4, 42, tzinfo=timezone.utc)
+    alert = build_alert("A1 test melding", [{"capcode": "0016175"}], "raw", "sdr", when=when)
+    assert alert["tijd"] == "19:04"
+    assert alert["timestamp"] == "2026-09-24T19:04:42+02:00"
+    assert alert["id"].startswith("20260924T190442-")
+
+
 def test_build_alert_aliases() -> None:
     alert = build_alert("P2 test", [{"capcode": "1"}], "raw", "mock")
     assert alert["tekstmelding"] == alert["message"]
@@ -90,5 +102,6 @@ if __name__ == "__main__":
     test_repairs_one_bit_street_name()
     test_assembles_fragments()
     test_detect_helpers()
+    test_timestamp_is_local()
     test_build_alert_aliases()
     print("ok")

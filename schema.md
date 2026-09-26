@@ -12,9 +12,9 @@ All MQTT payloads and the internal store use this shape. The HTTP `/api2/find/` 
 ```json
 {
   "schema": 1,
-  "id": "20260920T103215Z-1420054",
-  "timestamp": "2026-09-20T10:32:15Z",
-  "tijd": "10:32",
+  "id": "20260920T123215-1420054",
+  "timestamp": "2026-09-20T12:32:15+02:00",
+  "tijd": "12:32",
   "message": "P 1 Amsterdam Amstel — woningbrand",
   "tekstmelding": "P 1 Amsterdam Amstel — woningbrand",
   "priority": "P1",
