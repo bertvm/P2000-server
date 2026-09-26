@@ -75,6 +75,13 @@ def test_assembles_fragments() -> None:
     assert alert["message"] == "A1 Temminckstraat LEIDEN"
 
 
+def test_keeps_hyphenated_place_name() -> None:
+    line = "FLEX_NEXT|1600/2|11.010.A|000016175|SS|5|ALN|3.0.K|A1 3255TG Oude-Tonge"
+    alert = parse_flex_line(line)
+    assert alert is not None
+    assert alert["message"] == "A1 3255TG Oude-Tonge"
+
+
 def test_detect_helpers() -> None:
     assert detect_service("Lifeliner 1 onderweg") == "lifeliner"
     assert detect_priority("PRIO 2 test") == "P2"
@@ -100,6 +107,7 @@ if __name__ == "__main__":
     test_parse_json_flex()
     test_parse_flex_next_drops_garbage()
     test_repairs_one_bit_street_name()
+    test_keeps_hyphenated_place_name()
     test_assembles_fragments()
     test_detect_helpers()
     test_timestamp_is_local()

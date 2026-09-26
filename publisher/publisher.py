@@ -223,7 +223,7 @@ def repair_flex_bits(text: str) -> str:
     def fix_token(token: str) -> str:
         chars = list(token)
         for index, ch in enumerate(chars):
-            if ch.isalpha():
+            if ch.isalpha() or ch in "-'":
                 continue
             if index == 0 or index == len(chars) - 1:
                 continue
